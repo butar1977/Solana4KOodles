@@ -92,6 +92,8 @@ class TradeService {
                 msg
             });
 
+            logger.info(`Txn ${token} | ${userId} |  ${amount} | ${tradeType} | Pending`)
+
 
             await this.checkTxn({ signature, userId, token }, tradeType);
             return { success: true, trade };
@@ -313,7 +315,7 @@ class TradeService {
         const { signature, userId, token } = trade;
         let res;
         let attempts = 0;
-        let maxAttempts = 5; // Retry up to 5 times
+        let maxAttempts = 30; // Retry up to 5 times
         let newStatus = "failed";
         let message = `❌ Your trade for ${token} has failed.\n🔗 [View Transaction](https://solscan.io/tx/${signature}`;
 
@@ -324,7 +326,7 @@ class TradeService {
                 // Retry if response is null (transaction still pending)
                 if (!res) {
                     logger.info(`🔄 Retrying... Txn ${signature} not found.`);
-                    await NotificationService.delay(10000); // Wait 5s before retrying
+                    await NotificationService.delay(1*1000); // Wait 5s before retrying
                     attempts++;
                     continue;
                 }
@@ -346,8 +348,8 @@ class TradeService {
 
             } catch (rpcError) {
                 console.error(`⚠️ RPC Error for ${signature}:`, rpcError.message);
-                await NotificationService.delay(10000);
-                attempts++;
+                await NotificationService.delay(1*1000);
+                attempts++; 
             }
         }
 

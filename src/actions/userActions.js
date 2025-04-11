@@ -183,7 +183,6 @@ async function getPnLEndDate(ctx) {
 }
 
 async function handleTextMessageUser(ctx, action) {
-    logger.info(`ctx.session.actions ${action}`);
     if (ctx.session.waitingForPassword) {
         await verifyPassword(ctx);
     } else if (ctx.session.waitingWalletSetup) {

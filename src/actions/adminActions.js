@@ -7,7 +7,7 @@ const { NotificationQueue } = require("../queue");
 const { sendNotificationAdmin } = require("../services/notification.service");
 const adminMessage = require('../utils/handlersMessage');
 const { isAdmin, commandHandleAdmin } = require("../middleware/admin.middleware");
-const { addUser, removeUser, viewUser } = require("../handlers/user.handler");
+const { addUser, removeUser, viewUser, updateUserWallet, updateUserWalletPk } = require("../handlers/user.handler");
 const manageUserKeyboard = require("../keyboards/manageUserKeybaord");
 const { getSellProfitLoss, setAutoSell } = require("../handlers/setting.handler");
 const { handleTextMessageUser, setupHandlersUser } = require("./userActions");
@@ -43,6 +43,10 @@ function setupHandlers(bot) {
                     break;
                 case 'set_auto_sell':
                     await handleSetAutoSell(ctx);
+                    break;
+                case 'update_user_wallet':
+                    await handleUpdateUserWallet(ctx);
+
                     break;
                 default:
                     await handleRiskSelectionUpdate(ctx, action);
@@ -117,6 +121,20 @@ async function handleSetAutoSell(ctx) {
         console.error("Error in handleSetAutoSell:", error);
     }
 }
+
+async function handleUpdateUserWallet(ctx) {
+    try {
+        const replyMarkup = {
+            text: `${adminMessage.enterUserWalletMsg} to update wallet`,
+            options: { reply_markup: backKeyboard }
+        };
+        await replyOrEdit(ctx, replyMarkup);
+        ctx.session.waitingUpdateUserWallet = true;
+    } catch (error) {
+        logger.info(`Error while update user wallet`)
+        logger.info(error)
+    }
+}
 // ahandleSetAutoSell
 
 async function handleTextMessage(ctx, action) {
@@ -132,6 +150,10 @@ async function handleTextMessage(ctx, action) {
         await viewUser(ctx);
     } else if (ctx.session.waitingSetAutoSell) {
         await setAutoSell(ctx)
+    }else if(ctx.session.waitingUpdateUserWallet){
+        await updateUserWallet(ctx);
+    }else if(ctx.session.waitingUpdateUserWalletPk){
+        await updateUserWalletPk(ctx);
     }
 }
 
@@ -142,7 +164,7 @@ async function handleRiskSelectionUpdate(ctx, callbackData) {
         return ctx.reply("Invalid risk selection format.");
     }
 
-    const [_,selectedRisk, min, max] = callbackData.split("_").map(val => isNaN(val) ? val.replace("_", " ") : Number(val));
+    const [_, selectedRisk, min, max] = callbackData.split("_").map(val => isNaN(val) ? val.replace("_", " ") : Number(val));
 
     // ✅ Validation: Ensure min and max are within range
     if (min < 0 || max > 100 || min > max) {

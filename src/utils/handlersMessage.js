@@ -16,18 +16,22 @@ module.exports = {
     accountLinked: '✅ *Private Key Added Securely!*\n\nYour wallet is now linked.',
     buyAmtMsg: '💰 Enter the buy amount (in tokens)',
     invalidAmount: "❌ Invalid buy amount. Please enter a valid number.",
-    
+
     enterSlippage: "📉 Enter slippage percentage (e.g., 0.5 for 0.5%):",
     invalidSlippage: "❌ Invalid slippage. Please enter a valid percentage (e.g., 0.5 for 0.5%). Max : 50",
-    
+
     notificationUpdated: '🔔 Notifications have been updated',
     tradeUpdated: '🔔 Trade status have been updated',
 
     enterStopLoss: "📉 Enter Stop Loss percentage (e.g., 2 for 2% drop):",
     invalidStopLoss: "❌ Invalid Stop Loss. Please enter a positive number.",
-    
+
     enterTakeProfit: "📈 Enter Take Profit percentage (e.g., 5 for 5% gain):",
     invalidTakeProfit: "❌ Invalid Take Profit. Please enter a positive number.",
 
-    pnlDateRange:'Select option for PnL'
+    pnlDateRange: 'Select option for PnL',
+    adminUpdateUserWallet: 'Please send user **private key**. We will encrypt it for security\n\n' +
+        `⚠️ *Warning:* Never share your private key with anyone, including here.`,
+    userNotActive: '❌ User had been removed'
+
 };

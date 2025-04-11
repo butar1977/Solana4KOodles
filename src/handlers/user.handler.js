@@ -292,7 +292,7 @@ async function getTakeProfit(ctx) {
         const takeProfit = parseFloat(ctx.message.text.trim());
 
 
-        if (isNaN(takeProfit) || takeProfit <= 0 ) {
+        if (isNaN(takeProfit) || takeProfit <= 0) {
             return ctx.reply("⚠️ Invalid Take Profit value. Please enter a positive number.");
         }
 
@@ -310,7 +310,6 @@ async function getTakeProfit(ctx) {
         ctx.session.waitingForBuyAmount = false;
         ctx.session.waitingForSlippage = false;
 
-    
         logger.info(`Stop loss and Take profit updated for buy trades  `)
         return ctx.reply(
             `✅ *Trade parameters updated!*\n\n🔹 Stop Loss: ${ctx.session.stopLoss}\n🔹 Take Profit: ${takeProfit}`,
@@ -433,6 +432,85 @@ async function tokenForceSell(ctx) {
 
     }
 }
+async function updateUserWallet(ctx) {
+    try {
+        if (!await isAdmin(ctx)) return ctx.reply(adminMessage.unauthAccess);
+
+        const password = ctx.message.text;
+        if (!password) return ctx.reply(adminMessage.passwordRequired);
+        ctx.session.waitingUpdateUserWallet = false;
+
+        const users = await User.find();
+        for (let user of users) {
+            if (await user.comparePassword(password)) {
+                if (!user.status) {
+                    return ctx.reply(
+                        adminMessage.userNotActive,
+                        {
+                            parse_mode: "Markdown",
+                            reply_markup: adminMenuKeyboard
+                        }
+                    );
+                }
+                ctx.session.waitingUpdateUserWalletPk = true;
+                ctx.session.waitingUpdateUserWalletUser = user.telegramId;
+                logger.info(`Valid user, taking wallet to update`)
+                return ctx.reply(
+                    adminMessage.adminUpdateUserWallet,
+                    {
+                        parse_mode: "Markdown",
+                        reply_markup: backKeyboard
+                    }
+                );
+            }
+        }
+        return ctx.reply(adminMessage.userNotFound, {
+            parse_mode: "Markdown",
+            reply_markup: adminMenuKeyboard
+        }
+        );
+    } catch (error) {
+        console.log(error)
+        ctx.session.waitingUpdateUserWallet = false;
+        logger.info(`Error while updating user wallet `)
+        logger.info(error)
+    }
+
+}
+
+
+async function updateUserWalletPk(ctx) {
+    try {
+        const userMessage = ctx.message.text.trim();
+        const userId = ctx.session.waitingUpdateUserWalletUser;
+        try {
+            Keypair.fromSecretKey(bs58.default.decode(userMessage));
+        } catch (err) {
+            return ctx.reply(adminMessage.invaildPrivateKey, {
+                parse_mode: "Markdown",
+                reply_markup: backKeyboard
+            });
+        }
+
+        await User.findOneAndUpdate(
+            { telegramId: userId },
+            { privateKey: userMessage },
+            { upsert: true, new: true }
+        );
+        logger.info(`User wallet changed tid : ${userId}`)
+        return ctx.reply(
+            `✅ *User wallet updated!*\n\n`,
+            {
+                parse_mode: "Markdown",
+                reply_markup: adminMenuKeyboard
+            }
+        );
+    } catch (error) {
+        logger.info(`Error while updating wallet`)
+        logger.info(error)
+    }
+
+}
 
 module.exports = {
     addUser,
@@ -450,5 +528,7 @@ module.exports = {
     getStopLoss,
     getTakeProfit,
     tokenForceSell,
-    updateTradeToggle
+    updateTradeToggle,
+    updateUserWallet,
+    updateUserWalletPk
 };

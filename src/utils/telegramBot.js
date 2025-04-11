@@ -49,6 +49,10 @@ async function resetFlags(ctx) {
     ctx.session.waitingWalletSetup = false;
     ctx.session.waitingForBuyAmount = false;
     ctx.session.waitingForSlippage = false;
+    ctx.session.waitingSetAutoSell = false;
+    ctx.session.waitingUpdateUserWalletPk = false;
+    ctx.session.waitingUpdateUserWallet = false;
+    ctx.session.waitingUpdateUserWalletUser = false;
 }
 
 function getStartOfDay(date = new Date()) {

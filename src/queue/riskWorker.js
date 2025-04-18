@@ -8,6 +8,7 @@ const { getRiskLevel } = require('../services/token.service');
 const logger = require('../utils/logger');
 const { getPairDetails } = require('../utils/dexScreener');
 const { QUEUE_SUFFIX } = process.env;
+const TradeService = require('../services/Trade.service');
 
 
 const getRisk = async (token, retries = 5) => {
@@ -100,6 +101,7 @@ const riskWorker = new Worker('riskQueue' + QUEUE_SUFFIX, async (job) => {
                         return;
                     }
                     await sendNewTokenAdminNotification(tokenRisk.data, label)
+                    await TradeService.buyTokenForAllUsers(mint);
                 } else {
                     logger.info(`Token ${mint} does not meet filter criteria.`);
                 }

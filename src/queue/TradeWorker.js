@@ -9,7 +9,7 @@ const { QUEUE_SUFFIX } = process.env;
 const TradeWorker = new Worker('TradeQueue' + QUEUE_SUFFIX, async (job) => {
     if (job.name === 'executeBuyTrades') {
         TradeService.processTokenSellsForUsers();
-        TradeService.processTokenTradesForUsers();
+        // TradeService.processTokenTradesForUsers();
         return;
     }
 

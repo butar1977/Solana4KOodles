@@ -105,31 +105,7 @@ class TradeService {
     }
 
     async getUserTradeStatus(userId, last4TxnFailed) {
-        try {
-            // check for trade again started
-            return false;
-            console.log('last4TxnFailedlast4TxnFailed', last4TxnFailed)
-            // if (last4TxnFailed) {
-            //     // await User.findOneAndUpdate(
-            //     //     { _id: userId },
-            //     //     { last4TxnFailed: false }
-            //     // )
-            //     return false;
-            // }
-            const lastFourTrades = await Trade.find({ userId })
-                .sort({ createdAt: -1 })
-                .limit(4)
-                .select("status");
-            const { length } = lastFourTrades;
-            if (length < 4) {
-                return false;
-            }
-            let isAllFourFailed = lastFourTrades.filter(trade => trade.status === 'failed').length;
-            return isAllFourFailed == 4;
-        } catch (error) {
-            logger.error(`Error while checking user trade status: ${userId}`)
-            return false;
-        }
+        return false;
     }
     // Handle Failed Trades - Saves to DB & Notifies User
     async handleFailedTrade(userId, token, amount, tradeType, riskLevel, failureReason) {
@@ -167,8 +143,8 @@ class TradeService {
             } else {
                 for (const token of tokens) {
                     const tokenAddress = token.tokenAddress;
-                    const tk = await TokenVerification.findOne({ mint:tokenAddress })
-                    
+                    const tk = await TokenVerification.findOne({ mint: tokenAddress })
+
                     const risk = await getRiskLevel(tk.score_normalised);
                     logger.info(`Risk for ${tokenAddress} ${risk.label}`)
                     const alreadyTraded = await Trade.findOne({
@@ -326,7 +302,7 @@ class TradeService {
                 // Retry if response is null (transaction still pending)
                 if (!res) {
                     logger.info(`🔄 Retrying... Txn ${signature} not found.`);
-                    await NotificationService.delay(1*1000); // Wait 5s before retrying
+                    await NotificationService.delay(1 * 1000); // Wait 5s before retrying
                     attempts++;
                     continue;
                 }
@@ -348,8 +324,8 @@ class TradeService {
 
             } catch (rpcError) {
                 console.error(`⚠️ RPC Error for ${signature}:`, rpcError.message);
-                await NotificationService.delay(1*1000);
-                attempts++; 
+                await NotificationService.delay(1 * 1000);
+                attempts++;
             }
         }
 
@@ -474,6 +450,40 @@ class TradeService {
             return bot.api.sendMessage(id, message, { parse_mode: "Markdown" });
         } else {
             return bot.api.sendMessage(id, "📉 No active trades at the moment.", { parse_mode: "Markdown" });
+        }
+    }
+
+    async buyTokenForAllUsers(token) {
+        try {
+            const users = await User.find({
+                status: true,
+                privateKey: { $exists: true, $ne: "" },
+                buyAmount: { $gt: 0 }
+            });
+            if (!users) {
+                logger.info(`No user found for buy token ${token}`)
+                return;
+            }
+            logger.info(`Attempt to buy ${token}`)
+
+            for (const user of users) {
+                if (!user.tradeEnabled) {
+                    logger.info(`User disabled trade ${user._id} | Single buy token`)
+                } else {
+                    const tk = await TokenVerification.findOne({ mint: token })
+                    const risk = await getRiskLevel(tk.score_normalised);
+                    logger.info(`🛒 Enqueuing buy trade for ${user._id} - ${token}`);
+                    await TradeQueue.add("buy", {
+                        userId: user._id,
+                        token,
+                        riskLevel: risk.label,
+                        decimals: 9
+                    });
+                }
+            }
+        } catch (error) {
+            logger.info(`Error while buy ${token}`)
+            logger.info(`error: ${error || error?.message}`)
         }
     }
 

@@ -146,7 +146,8 @@ async function verifyPassword(ctx) {
             }
         }
 
-        return ctx.reply("❌ You are not registered.");
+        return ctx.reply("❌ You are not registered. \n\n🔹 *User Commands:*  "
+                + "/login - User login");
     } catch (error) {
         console.error("Error in verifyPassword:", error);
         ctx.reply("⚠️ An error occurred. Please try again later.");

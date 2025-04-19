@@ -4,7 +4,7 @@ const Trade = require("../models/Trade");
 const jupiterService = require("../services/jupiter.service");
 const logger = require("./logger");
 
-const BATCH_SIZE = 45; // You can tweak this depending on service limits
+const BATCH_SIZE = 40; // Adjust the batch size according to the API limits and database performance
 
 function chunkArray(array, size) {
     const result = [];
@@ -26,14 +26,16 @@ async function updateTokenPrice() {
         const tokenChunks = chunkArray(tokens, BATCH_SIZE);
         const bulkOps = [];
 
-        for (const chunk of tokenChunks) {
+        // Processing all chunks in parallel
+        const bulkWritePromises = tokenChunks.map(async (chunk) => {
             const prices = await jupiterService.getTokenPrice(chunk.join(','), true);
-            
+            const chunkBulkOps = [];
+
             for (const token of chunk) {
                 const price = prices[token]?.price;
                 if (price) {
                     logger.info(`Price logged for ${token}: ${price}`);
-                    bulkOps.push({
+                    chunkBulkOps.push({
                         updateOne: {
                             filter: { token },
                             update: {
@@ -47,17 +49,21 @@ async function updateTokenPrice() {
                     });
                 }
             }
-        }
 
-        if (bulkOps.length) {
-            const result = await TokenPrice.bulkWrite(bulkOps);
-            logger.info(`Token price bulk upsert completed. Matched: ${result.matchedCount}, Modified: ${result.modifiedCount}, Upserts: ${result.upsertedCount}`);
-        } else {
-            logger.info(`No valid prices found for tokens`);
-        }
+            // If there are any bulk operations to write
+            if (chunkBulkOps.length) {
+                await TokenPrice.bulkWrite(chunkBulkOps);
+                logger.info(`Batch bulk write completed for ${chunk.length} tokens`);
+            }
+        });
+
+        // Wait for all bulk write operations to complete
+        await Promise.all(bulkWritePromises);
+
+        logger.info('All token price updates completed successfully');
 
     } catch (error) {
-        logger.error(`Error while updating token price`);
+        logger.error('Error while updating token price');
         console.error(error);
     }
 }

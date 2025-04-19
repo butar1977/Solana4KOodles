@@ -6,7 +6,7 @@ const logger = require("./logger");
 
 async function updateTokenPrice() {
     try {
-        const tokens = await Trade.distinct('token', { status: { $nin: ['failed','success'] } });
+        const tokens = await Trade.distinct('token', { tradeType: 'buy', status: { $nin: ['failed'] } });
         if (!tokens.length) {
             logger.info('No token found in trade for price');
             return;

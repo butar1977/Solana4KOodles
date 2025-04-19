@@ -4,7 +4,7 @@ const Trade = require("../models/Trade");
 const jupiterService = require("../services/jupiter.service");
 const logger = require("./logger");
 
-const BATCH_SIZE = 20; // Adjust the batch size according to the API limits and database performance
+const { BATCH_SIZE } = process.env;
 
 function chunkArray(array, size) {
     const result = [];
@@ -16,54 +16,40 @@ function chunkArray(array, size) {
 
 async function updateTokenPrice() {
     try {
-        const tokens = await Trade.distinct('token', { tradeType: 'buy', status: { $nin: ['failed'] } });
+        const tokens = await Trade.distinct('token', { tradeType: 'buy', status: { $nin: ['failed','pending'] } });
         if (!tokens.length) {
-            logger.info('No token found in trade for price');
+            logger.info('No tokens found in trades for price update');
             return;
         }
 
         logger.info(`Getting price update for ${tokens.length} tokens`);
-        const tokenChunks = chunkArray(tokens, BATCH_SIZE);
-        const bulkOps = [];
 
-        // Processing all chunks in parallel
-        const bulkWritePromises = tokenChunks.map(async (chunk) => {
+        const JUPITER_CHUNK_SIZE = 50;
+        const tokenChunks = chunkArray(tokens, JUPITER_CHUNK_SIZE);
+        const tokenPriceDocs = [];
+
+        // Fetch prices in fixed Jupiter API chunks
+        for (const chunk of tokenChunks) {
             const prices = await jupiterService.getTokenPrice(chunk.join(','), true);
-            const chunkBulkOps = [];
 
             for (const token of chunk) {
                 const price = prices[token]?.price;
                 if (price) {
-                    logger.info(`Price logged for ${token}: ${price}`);
-                    chunkBulkOps.push({
-                        updateOne: {
-                            filter: { token },
-                            update: {
-                                $set: {
-                                    price,
-                                    date: new Date()
-                                }
-                            },
-                            upsert: true
-                        }
-                    });
+                    logger.info(`Price for ${token}: ${price}`);
+                    tokenPriceDocs.push({ token, price, date: new Date() });
                 }
             }
+        }
 
-            // If there are any bulk operations to write
-            if (chunkBulkOps.length) {
-                await TokenPrice.bulkWrite(chunkBulkOps);
-                logger.info(`Batch bulk write completed for ${chunk.length} tokens`);
-            }
-        });
-
-        // Wait for all bulk write operations to complete
-        await Promise.all(bulkWritePromises);
+        // Insert into Mongo in BATCH_SIZE chunks
+        const insertChunks = chunkArray(tokenPriceDocs, Number(BATCH_SIZE));
+        for (const insertChunk of insertChunks) {
+            await TokenPrice.insertMany(insertChunk);
+        }
 
         logger.info('All token price updates completed successfully');
-
     } catch (error) {
-        logger.error('Error while updating token price');
+        logger.error('Error while updating token prices');
         console.error(error);
     }
 }

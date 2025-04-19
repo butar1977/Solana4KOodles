@@ -4,6 +4,16 @@ const Trade = require("../models/Trade");
 const jupiterService = require("../services/jupiter.service");
 const logger = require("./logger");
 
+const BATCH_SIZE = 85; // You can tweak this depending on service limits
+
+function chunkArray(array, size) {
+    const result = [];
+    for (let i = 0; i < array.length; i += size) {
+        result.push(array.slice(i, i + size));
+    }
+    return result;
+}
+
 async function updateTokenPrice() {
     try {
         const tokens = await Trade.distinct('token', { tradeType: 'buy', status: { $nin: ['failed'] } });
@@ -12,27 +22,30 @@ async function updateTokenPrice() {
             return;
         }
 
-        logger.info(`Getting price update for ${tokens.length}`);
-        const prices = await jupiterService.getTokenPrice(tokens.join(','), true);
-
+        logger.info(`Getting price update for ${tokens.length} tokens`);
+        const tokenChunks = chunkArray(tokens, BATCH_SIZE);
         const bulkOps = [];
 
-        for (const token of tokens) {
-            const price = prices[token]?.price;
-            if (price) {
-                logger.info(`Price logged for ${token}: ${price}`);
-                bulkOps.push({
-                    updateOne: {
-                        filter: { token },
-                        update: {
-                            $set: {
-                                price,
-                                date: new Date()
-                            }
-                        },
-                        upsert: true
-                    }
-                });
+        for (const chunk of tokenChunks) {
+            const prices = await jupiterService.getTokenPrice(chunk.join(','), true);
+            
+            for (const token of chunk) {
+                const price = prices[token]?.price;
+                if (price) {
+                    logger.info(`Price logged for ${token}: ${price}`);
+                    bulkOps.push({
+                        updateOne: {
+                            filter: { token },
+                            update: {
+                                $set: {
+                                    price,
+                                    date: new Date()
+                                }
+                            },
+                            upsert: true
+                        }
+                    });
+                }
             }
         }
 
@@ -49,5 +62,4 @@ async function updateTokenPrice() {
     }
 }
 
-
-module.exports = { updateTokenPrice }
+module.exports = { updateTokenPrice };

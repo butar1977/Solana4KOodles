@@ -24,7 +24,7 @@ class JupiterService {
 
     async getQuote(inputMint, outputMint, amount, slippage = 0.5) {
         try {
-            await this.enforceRateLimit();  // Enforce rate limit
+            //await this.enforceRateLimit();  // Enforce rate limit
 
             const params = { inputMint, outputMint, amount, slippageBps: slippage * 100 };
             logger.info(`params', ${JSON.stringify(params)}`);
@@ -38,7 +38,7 @@ class JupiterService {
 
     async getSwapTransaction(userPublicKey, quoteResponse) {
         try {
-            await this.enforceRateLimit();  // Enforce rate limit
+            //await this.enforceRateLimit();  // Enforce rate limit
 
             const response = await axios.post(`${JUPITER_API_BASE}/swap`, {
                 userPublicKey,
@@ -86,25 +86,35 @@ class JupiterService {
             console.error("Error getTxnStatus:", error);
         }
     }
-
-    async getTokenPrice(token) {
+    async getPriceFromJupiter(token, bulk = false) {
         try {
-            await this.enforceRateLimit();  // Enforce rate limit
+            const url = `https://api.jup.ag/price/v2?ids=${token}`;
+            const response = await axios.get(url);
+            if (bulk) {
+                logger.info(`Getting token price in bulk | ${token}`)
+                logger.info(`Bulk token price, ${JSON.stringify(response?.data?.data)}`);
+                return response?.data.data || 0;
+            }
+            logger.info(`responseresponseresponse, ${response?.data?.data[token]?.price}`);
+            return response?.data?.data[token]?.price || 0;
+        } catch (err) {
+            logger.info(`Error fetching price for ${token}:`, err);
+        }
+    }
 
+    async getTokenPrice(token, bulk = false) {
+        try {
+            //await this.enforceRateLimit();  // Enforce rate limit
+            if (bulk) {
+                return await this.getPriceFromJupiter(token, true);
+            }
             const url = `${RUGCHECK_API_URL ?? `https://api.rugcheck.xyz`}/v1/tokens/${token}/report`;
             const response = await axios.get(url);
             logger.info(`responseresponseresponse, ${response?.data?.price}`);
             return response?.data?.price || 0;
         } catch (error) {
-            try {
-                const url = `https://api.jup.ag/price/v2?ids=${token}`;
-                const response = await axios.get(url);
-                logger.info(`responseresponseresponse, ${response?.data?.data[token]?.price}`);
-                return response?.data?.data[token]?.price || 0;
-            } catch (err) {
-                logger.info(`Error fetching price for ${token}:`, error);
-            }
-            return 0;
+            logger.info(`Issue while getting price ${error}`)
+            return await getPriceFromJupiter(token);
         }
     }
 }

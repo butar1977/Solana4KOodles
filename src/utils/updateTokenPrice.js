@@ -6,24 +6,48 @@ const logger = require("./logger");
 
 async function updateTokenPrice() {
     try {
-        const tokens = await Trade.distinct('token', { status: { $ne: 'failed' } });
-        if (!tokens.length){
-            logger.info('No token found in trade for price')
+        const tokens = await Trade.distinct('token', { status: { $nin: ['failed','success'] } });
+        if (!tokens.length) {
+            logger.info('No token found in trade for price');
             return;
-        } 
+        }
 
-        logger.info(`Getting price update for ${tokens.length}`)
+        logger.info(`Getting price update for ${tokens.length}`);
+        const prices = await jupiterService.getTokenPrice(tokens.join(','), true);
+
+        const bulkOps = [];
+
         for (const token of tokens) {
-            const price = await jupiterService.getTokenPrice(token);
+            const price = prices[token]?.price;
             if (price) {
-                await TokenPrice.create({ token, price, date: new Date() });
                 logger.info(`Price logged for ${token}: ${price}`);
+                bulkOps.push({
+                    updateOne: {
+                        filter: { token },
+                        update: {
+                            $set: {
+                                price,
+                                date: new Date()
+                            }
+                        },
+                        upsert: true
+                    }
+                });
             }
         }
+
+        if (bulkOps.length) {
+            const result = await TokenPrice.bulkWrite(bulkOps);
+            logger.info(`Token price bulk upsert completed. Matched: ${result.matchedCount}, Modified: ${result.modifiedCount}, Upserts: ${result.upsertedCount}`);
+        } else {
+            logger.info(`No valid prices found for tokens`);
+        }
+
     } catch (error) {
-        logger.error(`Error while updating token price`)
-        console.log(error)
+        logger.error(`Error while updating token price`);
+        console.error(error);
     }
 }
+
 
 module.exports = { updateTokenPrice }

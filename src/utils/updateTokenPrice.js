@@ -4,7 +4,7 @@ const Trade = require("../models/Trade");
 const jupiterService = require("../services/jupiter.service");
 const logger = require("./logger");
 
-const BATCH_SIZE = 40; // Adjust the batch size according to the API limits and database performance
+const BATCH_SIZE = 20; // Adjust the batch size according to the API limits and database performance
 
 function chunkArray(array, size) {
     const result = [];

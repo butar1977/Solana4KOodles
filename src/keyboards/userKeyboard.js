@@ -6,12 +6,11 @@ async function getUserKeyboard(ctx) {
         const telegramId = ctx.from.id;
 
         const user = await User.findOne({ telegramId });
-        console.log('useruseruseruser', user)
         const notificationsEnabled = user?.notificationsEnabled ?? true; // Default to true
         const tradeEnabled = user?.tradeEnabled ?? false;
 
         return Markup.inlineKeyboard([
-            [Markup.button.callback("🚀 Setup Wallet", "setup_wallet")],
+            [Markup.button.callback("🔧 Manage Wallets", "manage_wallets")],
             [Markup.button.callback("📊 Set Buy Params", "set_buy_params")],
             [Markup.button.callback("📊 Set Sell", "set_stop_loss")],
             [Markup.button.callback("📜 View Trades", "view_trades")],
@@ -33,7 +32,7 @@ async function getUserKeyboard(ctx) {
     } catch (error) {
         console.error("Error fetching user keyboard:", error);
         return Markup.inlineKeyboard([
-            [Markup.button.callback("🚀 Setup Wallet", "setup_wallet")],
+            [Markup.button.callback("🔧 Manage Wallets", "manage_wallets")],
             [Markup.button.callback("📊 Set Buy Params", "set_buy_params")],
             [Markup.button.callback("📊 Set Sell", "set_stop_loss")],
             [Markup.button.callback("📜 View Trades", "view_trades")],
@@ -63,14 +62,6 @@ async function confirmUserSellParams() {
         [Markup.button.callback("Back", 'user_back')],
     ]).reply_markup;
 }
-// const await getUserKeyboard = Markup.inlineKeyboard([
-//     [Markup.button.callback("🚀 Setup Wallet", "setup_wallet")],
-//     [Markup.button.callback("📊 Set Buy Params", "set_buy_params")],
-//     [Markup.button.callback("📜 View Trades", "view_trades")],
-//     [Markup.button.callback("💰 Force Sell", "force_sell")],
-//     [Markup.button.callback("🔔 Notifications", "toggle_notifications")]
-// ]).reply_markup; 
-
 
 async function pnlKeyboard() {
     return Markup.inlineKeyboard([

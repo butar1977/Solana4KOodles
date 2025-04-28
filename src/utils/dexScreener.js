@@ -1,6 +1,21 @@
 const axios = require('axios');
 const { DEXSCREENER_API } = process.env;
 
+async function pairResult(solanaPair, usdcPair) {
+    return {
+        tokenDataVolumeSOL: solanaPair ? solanaPair.volume : { h24: 0, h6: 0, h1: 0, m5: 0 },
+        tokenDataVolumeUSDC: usdcPair ? usdcPair.volume : { h24: 0, h6: 0, h1: 0, m5: 0 },
+        tokenVolume:
+            (solanaPair?.volume?.h24 || 0) +
+            (usdcPair?.volume?.h24 || 0),
+        priceChange: solanaPair?.priceChange || usdcPair?.priceChange || { h1: 0, h6: 0, h24: 0 },
+        liquidity: solanaPair?.liquidity || usdcPair?.liquidity || { usd: 0, base: 0, quote: 0 },
+        fdv: solanaPair?.fdv || usdcPair?.fdv || 0,
+        marketCap: solanaPair?.marketCap || usdcPair?.marketCap || 0,
+        pairCreatedAt: solanaPair?.pairCreatedAt || usdcPair?.pairCreatedAt || null
+    };
+}
+
 async function getPairDetails(tokenAddress) {
     try {
         const { data } = await axios.get(`${DEXSCREENER_API}/latest/dex/tokens/${tokenAddress}`);
@@ -18,20 +33,8 @@ async function getPairDetails(tokenAddress) {
                 }
             });
         }
-
-        return {
-            tokenDataVolumeSOL: solanaPair ? solanaPair.volume : { h24: 0, h6: 0, h1: 0, m5: 0 },
-            tokenDataVolumeUSDC: usdcPair ? usdcPair.volume : { h24: 0, h6: 0, h1: 0, m5: 0 },
-            tokenVolume:
-                (solanaPair?.volume?.h24 || 0) +
-                (usdcPair?.volume?.h24 || 0),
-            priceChange: solanaPair?.priceChange || usdcPair?.priceChange || { h1: 0, h6: 0, h24: 0 },
-            liquidity: solanaPair?.liquidity || usdcPair?.liquidity || { usd: 0, base: 0, quote: 0 },
-            fdv: solanaPair?.fdv || usdcPair?.fdv || 0,
-            marketCap: solanaPair?.marketCap || usdcPair?.marketCap || 0,
-            pairCreatedAt: solanaPair?.pairCreatedAt || usdcPair?.pairCreatedAt || null
-        };
-
+        
+        return pairResult(solanaPair, usdcPair);
     } catch (error) {
         console.error('❌ Error fetching token details:', error);
         return null;

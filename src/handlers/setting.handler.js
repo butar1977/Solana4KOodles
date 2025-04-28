@@ -22,7 +22,7 @@ async function setAutoSell(ctx) {
             return ctx.reply("❌ Invalid format! Use: `/set_auto_sell profit=X stop_loss=Y`", { parse_mode: "Markdown" });
         }
 
-        const [_, profit, stopLoss] = match.map(Number);
+        const [_, profit, stopLoss] = match.map(Number); //NOSONAR
 
         if (profit <= 0 || stopLoss <= 0) {
             return ctx.reply("❌ Invalid values! Profit and stop-loss must be positive numbers.");

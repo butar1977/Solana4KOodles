@@ -8,7 +8,7 @@ const NotificationWorker = new Worker(
     "NotificationQueue",
     async (job) => {
         try {
-            const { riskLevel, min, max,ctx } = job.data;
+            const { riskLevel, min, max } = job.data;
             logger.info(`📢 Processing risk update for: ${riskLevel} (${min}-${max})`);
 
             // Fetch users who have opted for notifications

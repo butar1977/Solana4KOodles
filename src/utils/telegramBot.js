@@ -85,25 +85,6 @@ function getDateRanges(action, customStartDate, customEndDate) {
     return { startDate, endDate };
 }
 
-
-// function getDateRanges(action) {
-//     let startDate = getStartOfDay(), endDate;
-
-//     if (action === "pnl_today") {
-//         endDate = getEndOfDay();
-//     } else if (action === "pnl_7days") {
-//         startDate = getStartOfDay(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
-//         endDate = getEndOfDay();
-//     } else if (action === "pnl_30days") {
-//         startDate = getStartOfDay(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
-//         endDate = getEndOfDay();
-//     }
-
-//     return { startDate, endDate };
-// }
-
-
-// Export Functions
 module.exports = {
     replyOrEdit,
     backMenu,

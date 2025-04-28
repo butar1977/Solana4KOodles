@@ -10,6 +10,30 @@ const logger = require('../utils/logger');
 
 const { QUEUE_SUFFIX } = process.env;
 
+
+const getPayload = async (tokenData) => {
+    const tokenVolumeData = await getPairDetails(tokenData.tokenAddress);
+    return {
+        url: tokenData.url,
+        chainId: tokenData.chainId,
+        tokenAddress: tokenData.tokenAddress,
+        icon: tokenData.icon || '',
+        header: tokenData.header || '',
+        openGraph: tokenData.openGraph || '',
+        description: tokenData.description || '',
+        links: tokenData.links || [],
+        source: tokenData.source || 'dexscreener',
+        tokenDataVolumeSOL: tokenVolumeData?.tokenDataVolumeSOL,
+        tokenDataVolumeUSDC: tokenVolumeData?.tokenDataVolumeUSDC,
+        tokenVolume: tokenVolumeData?.tokenVolume,
+        priceChange: tokenVolumeData?.priceChange,
+        liquidity: tokenVolumeData?.liquidity,
+        fdv: tokenVolumeData?.fdv,
+        marketCap: tokenVolumeData?.marketCap,
+        pairCreatedAt: tokenVolumeData?.pairCreatedAt
+    };
+}
+
 const tokenWorker = new Worker('tokenQueue' + QUEUE_SUFFIX, async (job) => {
     logger.info(`🚀 Worker processing job: ${job.name}`);
 
@@ -36,56 +60,15 @@ const tokenWorker = new Worker('tokenQueue' + QUEUE_SUFFIX, async (job) => {
                 return;
             }
 
-            const tokenVolumeData = await getPairDetails(tokenData.tokenAddress);
-
-            const tokenCreated = await Token.create({
-                url: tokenData.url,
-                chainId: tokenData.chainId,
-                tokenAddress: tokenData.tokenAddress,
-                icon: tokenData.icon || '',
-                header: tokenData.header || '',
-                openGraph: tokenData.openGraph || '',
-                description: tokenData.description || '',
-                links: tokenData.links || [],
-                source: tokenData.source || 'dexscreener',
-                tokenDataVolumeSOL: tokenVolumeData?.tokenDataVolumeSOL,
-                tokenDataVolumeUSDC: tokenVolumeData?.tokenDataVolumeUSDC,
-                tokenVolume: tokenVolumeData?.tokenVolume,
-                priceChange: tokenVolumeData?.priceChange,
-                liquidity: tokenVolumeData?.liquidity,
-                fdv: tokenVolumeData?.fdv,
-                marketCap: tokenVolumeData?.marketCap,
-                pairCreatedAt: tokenVolumeData?.pairCreatedAt
-            });
-
+            const payload = await getPayload(tokenData);
+            const tokenCreated = await Token.create(payload);
             logger.info(`✅ Token ${tokenData.tokenAddress} saved.`);
-
-
+            
             await riskQueue.add('checkRisk', {
                 tokenId: tokenCreated._id,
                 tokenAddress: tokenData.tokenAddress
             })
             logger.info(`🔍 Enqueued risk check for ${tokenData.tokenAddress}`);
-            //NOSONAR
-            // logger.info(`✅ Saving risk ${tokenData.tokenAddress}`);
-
-            //NOSONAR
-            // const tokenRisk=await getRisk(tokenData.tokenAddress);
-            // logger.info('tokenRisk',tokenRisk)
-            // logger.info('tokenRisk.daa',tokenRisk?.data)
-            // if(!tokenRisk.error){
-            //     await TokenRisk.create(
-            //         {
-            //             ...tokenRisk.data,
-            //             token_id:tokenCreated._id
-            //         }
-            //     )
-            // }
-            // logger.info(`✅ saved risk ${tokenData.tokenAddress}`);
-
-            // const verifyRisk = 
-
-
         } catch (error) {
             console.error('❌ Error processing token queue:', error);
         }

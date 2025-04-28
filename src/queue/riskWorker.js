@@ -26,7 +26,27 @@ const getRisk = async (token, retries = 5) => {
         throw error;
     }
 };
-
+const getTokenTradeFilters = () => {
+    return {
+        minLaunchAge: Number(process.env.MIN_VOLUME) || 0, // 0 hours
+        maxLaunchAge: (Number(process.env.MAX_LAUNCH_AGE) || 24) * 60 * 60 * 1000, // 12 hours in ms
+        minMarketCap: Number(process.env.MIN_MARKET_CAP) || 50000,
+        minVolume: Number(process.env.MIN_VOLUME) || 20000,
+        minLiquidity: Number(process.env.MIN_LIQUIDITY) || 10000,
+        minPriceChange: Number(process.env.MIN_PRICE_CHANGE) || 10,
+    };
+}
+const checkTokenValidity = async (mint, filters) => {
+    const currentTime = Date.now();
+    return await TokenRisk.findOne({
+        mint,
+        detectedAt: {
+            $gte: new Date(currentTime - filters.maxLaunchAge),
+            $lte: new Date(currentTime - filters.minLaunchAge)
+        },
+        percentageHolderTop10: { $gte: 40 }
+    }).lean();
+}
 const riskWorker = new Worker('riskQueue' + QUEUE_SUFFIX, async (job) => {
     try {
         logger.info(`🔍 Checking risk for ${job.data.tokenAddress}`);
@@ -54,27 +74,8 @@ const riskWorker = new Worker('riskQueue' + QUEUE_SUFFIX, async (job) => {
             const { score_normalised, mint } = tokenRisk.data;
             const { label } = await getRiskLevel(score_normalised);
 
-
-
-            const filters = {
-                minLaunchAge: Number(process.env.MIN_VOLUME) || 0, // 0 hours
-                maxLaunchAge: (Number(process.env.MAX_LAUNCH_AGE) || 24) * 60 * 60 * 1000, // 12 hours in ms
-                minMarketCap: Number(process.env.MIN_MARKET_CAP) || 50000,
-                minVolume: Number(process.env.MIN_VOLUME) || 20000,
-                minLiquidity: Number(process.env.MIN_LIQUIDITY) || 10000,
-                minPriceChange: Number(process.env.MIN_PRICE_CHANGE) || 10,
-            };
-            const currentTime = Date.now();
-
-            const isValidToken = await TokenRisk.findOne({
-                mint,
-                detectedAt: {
-                    $gte: new Date(currentTime - filters.maxLaunchAge),
-                    $lte: new Date(currentTime - filters.minLaunchAge)
-                },
-                percentageHolderTop10: { $gte: 40 }
-            }).lean();
-
+            const filters = getTokenTradeFilters();
+            const isValidToken = await checkTokenValidity(mint, filters);
 
             if (isValidToken) {
 
@@ -92,20 +93,20 @@ const riskWorker = new Worker('riskQueue' + QUEUE_SUFFIX, async (job) => {
                     $or: [{ "priceChange.h1": { $gte: filters.minPriceChange } }],
                 };
 
-                console.log('query',query)
+                console.log('query', query)
                 const tokens = await token.find(query).lean();
 
-                if (tokens.length) {
-                    if (label === 'Super Risk') {
-                        await sendScamTokenAdminNotification(tokenRisk.data, label)
-                        return;
-                    }
-                    await sendNewTokenAdminNotification(tokenRisk.data, label)
-                    await TradeService.buyTokenForAllUsers(mint);
-                } else {
+                if (tokens.length === 0) {
+                    console.log('tokenstokens',tokens)
                     logger.info(`Token ${mint} does not meet filter criteria.`);
+                    return;
                 }
-
+                if (label === 'Super Risk') {
+                    await sendScamTokenAdminNotification(tokenRisk.data, label)
+                    return;
+                }
+                await sendNewTokenAdminNotification(tokenRisk.data, label)
+                await TradeService.buyTokenForAllUsers(mint);
             }
 
             logger.info(`✅ Risk saved for ${job.data.tokenAddress}`);

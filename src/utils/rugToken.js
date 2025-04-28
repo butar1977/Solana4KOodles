@@ -5,7 +5,7 @@ const nacl = require('tweetnacl');
 const { Keypair } = require('@solana/web3.js');
 
 // Load environment variables
-const SOLANA_PRIVATE_KEY = process.env.SOLANA_PRIVATE_KEY || "5wkasnkJmFezMwXxunzU8di5QAWsmnrTD4iMajfRvaWBpvN17HiTK3QZ9qfgPUs4n1ccrNh5uzEBAGyvBJgNT9CD";
+const SOLANA_PRIVATE_KEY = process.env.SOLANA_PRIVATE_KEY;
 const RUGCHECK_API_URL = process.env.RUGCHECK_API_URL || "https://api.rugcheck.xyz/v1/auth/login/solana";
 
 if (!SOLANA_PRIVATE_KEY) {

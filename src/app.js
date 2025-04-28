@@ -8,9 +8,6 @@ const db = require('./startup/db');
 const cors = require('cors');
 
 const startTelegramBot = require('./startup/startTelegramBot');
-const { getFilteredTokens } = require('./services/token.service');
-const { executeTrade } = require('./services/Trade.service');
-const TradeService = require('./services/Trade.service');
 const logger = require('./utils/logger');
 
 const app = express();

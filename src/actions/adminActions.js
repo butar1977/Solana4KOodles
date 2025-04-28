@@ -164,7 +164,7 @@ async function handleRiskSelectionUpdate(ctx, callbackData) {
         return ctx.reply("Invalid risk selection format.");
     }
 
-    const [_, selectedRisk, min, max] = callbackData.split("_").map(val => isNaN(val) ? val.replace("_", " ") : Number(val));
+    const [_, selectedRisk, min, max] = callbackData.split("_").map(val => isNaN(val) ? val.replace("_", " ") : Number(val));//NOSONAR
 
     // ✅ Validation: Ensure min and max are within range
     if (min < 0 || max > 100 || min > max) {

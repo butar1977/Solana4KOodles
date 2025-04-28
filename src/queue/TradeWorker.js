@@ -4,17 +4,32 @@ const { getUserPublicKey } = require('../utils/solanaHelper');
 const { Worker } = require('bullmq');
 const { redisConfig } = require('../../config/radis');
 const logger = require('../utils/logger');
+const Wallet = require('../models/Wallet');
 const { QUEUE_SUFFIX } = process.env;
+
+
+const getUserActiveWallet = async (user_id) => {
+    try {
+        const wallet = await Wallet.findOne({ status: true, user_id })
+        if (!wallet) {
+            logger.info(`User does not have any active wallet ${user_id}`)
+            return null;
+        }
+        return wallet.privateKey;
+
+    } catch (error) {
+        logger.info(`Unable to get active wallet ${error}`)
+    }
+}
 
 const TradeWorker = new Worker('TradeQueue' + QUEUE_SUFFIX, async (job) => {
     if (job.name === 'executeBuyTrades') {
         TradeService.processTokenSellsForUsers();
-        // TradeService.processTokenTradesForUsers();
         return;
     }
 
     try {
-        const { userId, token, riskLevel, decimals, realizedPnL,tokenPriceAtSell,msg } = job.data;
+        const { userId, token, riskLevel, decimals, realizedPnL, tokenPriceAtSell, msg } = job.data;
         let amount = 0;
 
         const user = await User.findOne({ _id: userId });
@@ -23,10 +38,15 @@ const TradeWorker = new Worker('TradeQueue' + QUEUE_SUFFIX, async (job) => {
             slippage,
             stopLoss,
             takeProfit,
-            privateKey
         } = user;
 
+        const privateKey = await getUserActiveWallet(userId);
+        if (privateKey === null) {
+            return;
+        }
+        
         const publicKey = await getUserPublicKey(privateKey);
+
         logger.info(`Processing trade: ${job.name} ${buyAmount} ${decimals}`);
 
 
@@ -61,7 +81,7 @@ const TradeWorker = new Worker('TradeQueue' + QUEUE_SUFFIX, async (job) => {
     }
 }, {
     connection: redisConfig, limiter: {
-        max: 2, 
+        max: 2,
         duration: 15 * 1000
     }
 });

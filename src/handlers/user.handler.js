@@ -7,12 +7,11 @@ const adminMessage = require("../utils/handlersMessage");
 const { backKeyboard } = require("../utils/telegramBot");
 const bs58 = require("bs58");
 const { getUserKeyboard, confirmUserSellParams } = require("../keyboards/userKeyboard");
-const { getUserPublicKey, getUserHoldings, getUserHoldingsToken } = require("../utils/solanaHelper");
+const { getUserPublicKey, getUserHoldingsToken } = require("../utils/solanaHelper");
 const { executeTrade } = require("../services/Trade.service");
 const logger = require("../utils/logger");
-const { TradeQueue, TradeStatusQueue } = require("../queue");
-const clearUserJobs = require("../utils/bullHelper");
-const Trade = require("../models/Trade");
+const Wallet = require("../models/Wallet");
+const { Markup } = require("telegraf");
 
 
 /**
@@ -147,7 +146,7 @@ async function verifyPassword(ctx) {
         }
 
         return ctx.reply("❌ You are not registered. \n\n🔹 *User Commands:*  "
-                + "/login - User login");
+            + "/login - User login");
     } catch (error) {
         console.error("Error in verifyPassword:", error);
         ctx.reply("⚠️ An error occurred. Please try again later.");
@@ -512,6 +511,207 @@ async function updateUserWalletPk(ctx) {
     }
 
 }
+async function getUserWallets(ctx, page = 1, perPage = 5) {
+    try {
+        const telegramId = ctx.from.id;
+        const user = await User.findOne({ telegramId });
+        let message = '👆 Tap a wallet to activate it';
+
+        if (!user) {
+            logger.warn(`User not found for telegram id ${telegramId}`);
+            return {
+                message: adminMessage.userNotFound,
+                keyboard: Markup.inlineKeyboard([
+                    [
+                        Markup.button.callback("🔙 Back", "user_back"),
+                        Markup.button.callback("🚀 Add Wallet", "add_wallet")
+                    ]
+                ]).reply_markup
+            };
+        }
+
+        const totalWallets = await Wallet.countDocuments({ user_id: user._id });
+        const totalPages = Math.ceil(totalWallets / perPage);
+        if (page > totalPages) page = totalPages;
+
+        page = Math.max(1, page);
+
+        const wallets = await Wallet.find({ user_id: user._id })
+            .skip(((page - 1)) * perPage)
+            .limit(perPage)
+            .lean();
+
+        if (!wallets || wallets.length === 0) {
+            logger.info(`User does not have any wallet`);
+            return {
+                message: adminMessage.walletNotLinked,
+                keyboard: Markup.inlineKeyboard([
+                    [
+                        Markup.button.callback("🔙 Back", "user_back"),
+                        Markup.button.callback("🚀 Add Wallet", "add_wallet")
+                    ]
+                ]).reply_markup
+            };
+        }
+
+        const walletButtons = wallets.map(wallet => {
+            const isActive = wallet.status ? '✅' : '';
+            return [Markup.button.callback(`${wallet.label} ${isActive}`, `activeWallet_${wallet._id}`)];
+        });
+
+        const navigationButtons = [];
+
+        if (page > 1) {
+            navigationButtons.push(Markup.button.callback("⬅️ Prev", `wallets_page_${page - 1}`));
+        }
+
+        navigationButtons.push(Markup.button.callback(`📄 ${page}/${totalPages}`, "noop"));
+
+        if (page < totalPages) {
+            navigationButtons.push(Markup.button.callback("➡️ Next", `wallets_page_${page + 1}`));
+        }
+
+        walletButtons.push([
+            Markup.button.callback("🔙 Back", "user_back"),
+            Markup.button.callback("🚀 Add Wallet", "add_wallet"),
+            ...navigationButtons
+        ]);
+
+        return {
+            message,
+            keyboard: Markup.inlineKeyboard(walletButtons).reply_markup
+        };
+
+    } catch (error) {
+        logger.error(`Get user wallet error: ${error}`);
+        return ctx.reply("🛑 Error while getting user wallets.");
+    }
+}
+
+async function getWalletNameAddPKey(ctx) {
+    try {
+        const telegramId = ctx.from.id;
+        const user = await User.findOne({ telegramId });
+        const userMessage = ctx.message.text.trim();
+
+        // Validate Private Key
+        try {
+            Keypair.fromSecretKey(bs58.default.decode(userMessage));
+        } catch (err) {
+            console.log('errerr', err)
+            logger.info(err)
+
+            return ctx.reply(adminMessage.invaildPrivateKey, {
+                parse_mode: "Markdown",
+                reply_markup: await getUserKeyboard(ctx)
+            });
+        }
+
+        // Check for duplicate wallet
+        const userWallets = await Wallet.find({ user_id: user._id });
+        const isDuplicateWallet = userWallets.some(wallet => wallet.privateKey === userMessage);
+        const newWallet = {
+            user_id: user._id,
+            privateKey: userMessage,
+            label: ctx.session.walletLabel
+        }
+        if (isDuplicateWallet) {
+            return ctx.reply(adminMessage.walletExist, {
+                parse_mode: "Markdown",
+                reply_markup: await getUserKeyboard(ctx)
+            });
+        }
+
+        if (userWallets.length === 0) {
+            newWallet.status = true;
+        }
+
+        await Wallet.create(newWallet);
+
+        logger.info(`Wallet added for user ${user._id}`);
+
+        return ctx.reply(adminMessage.walletAdded, {
+            parse_mode: "Markdown",
+            reply_markup: await getUserKeyboard(ctx)
+        })
+    } catch (erorr) {
+        logger.info(`error while setting private key`)
+        logger.info(JSON.stringify(error))
+    }
+}
+async function getWalletNameAdd(ctx) {
+    try {
+        const telegramId = ctx.from.id;
+        const walletLabel = ctx.message.text.trim();
+        const user = await User.findOne({ telegramId });
+
+        if (!user) {
+            logger.warn(`User not found for telegram id ${telegramId}`);
+            return {
+                message: adminMessage.userNotFound,
+                keyboard: Markup.inlineKeyboard([
+                    [Markup.button.callback("🔙 Back", "user_back")],
+                ]).reply_markup
+            };
+        }
+
+        ctx.session.walletLabel = walletLabel;
+        ctx.session.waitingWalletPKey = true;
+        ctx.session.waitingWalletAdd = false;
+
+        return ctx.reply(adminMessage.setupWallet, {
+            parse_mode: "Markdown",
+            reply_markup: backKeyboard
+        });
+
+    } catch (error) {
+        logger.error(`Error while adding wallet: ${JSON.stringify(error)}`);
+        return ctx.reply("❌ Failed to add wallet.");
+    }
+}
+
+async function toggleUserActiveWallet(walletId, ctx) {
+    try {
+        const telegramId = ctx.from.id;
+        const user = await User.findOne({ telegramId });
+
+        if (!user) {
+            logger.warn(`User not found for telegram id ${telegramId}`);
+            return ctx.reply(adminMessage.userNotFound, {
+                reply_markup: Markup.inlineKeyboard([
+                    [Markup.button.callback("🔙 Back", "user_back")]
+                ])
+            });
+        }
+
+        await Wallet.updateMany({ user_id: user._id }, { status: false });
+
+        const updated = await Wallet.findOneAndUpdate(
+            { _id: walletId },
+            { status: true },
+            { new: true }
+        );
+
+        if (!updated) {
+            logger.warn(`Wallet not found or doesn't belong to user`);
+            return ctx.reply("❌ Wallet not found or not associated with your account.");
+        }
+
+        logger.info(`✅ Active wallet updated to ${updated.label} (${updated._id}) for user ${user._id}`);
+
+        return ctx.reply(
+            `✅ Wallet *${updated.label}* is now active.`,
+            {
+                parse_mode: "Markdown",
+                reply_markup: await getUserKeyboard(ctx)
+            }
+        );
+
+    } catch (error) {
+        logger.error(`❌ Error in toggleUserActiveWallet: ${error}`);
+        return ctx.reply("⚠️ An error occurred while updating your active wallet. Please try again later.");
+    }
+}
 
 module.exports = {
     addUser,
@@ -531,5 +731,9 @@ module.exports = {
     tokenForceSell,
     updateTradeToggle,
     updateUserWallet,
-    updateUserWalletPk
+    updateUserWalletPk,
+    getUserWallets,
+    getWalletNameAdd,
+    getWalletNameAddPKey,
+    toggleUserActiveWallet
 };

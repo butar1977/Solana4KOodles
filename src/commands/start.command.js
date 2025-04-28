@@ -10,7 +10,6 @@ module.exports = {
     description: 'Start the Bot and show available commands',
 
     async execute(ctx) {
-        const chatId = ctx.chat.id;
         const userId = ctx.from.id;
         const isAdmin = await checkIfAdmin(userId);
 

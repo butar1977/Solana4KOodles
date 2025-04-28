@@ -7,7 +7,7 @@ const { NotificationQueue } = require("../queue");
 const { sendNotificationAdmin } = require("../services/notification.service");
 const adminMessage = require('../utils/handlersMessage');
 const { isAdmin } = require("../middleware/admin.middleware");
-const { addUser, removeUser, viewUser, verifyPassword, setupWallet, checkWalletSetup, getBuyAmount, getSlippage, getUserDetails, updateNotificationPreference, getStopLoss, getTakeProfit, tokenForceSell, updateTradeToggle } = require("../handlers/user.handler");
+const { addUser, removeUser, viewUser, verifyPassword, setupWallet, checkWalletSetup, getBuyAmount, getSlippage, getUserDetails, updateNotificationPreference, getStopLoss, getTakeProfit, tokenForceSell, updateTradeToggle, getUserWallets, getWalletNameAdd, getWalletNameAddPKey, toggleUserActiveWallet } = require("../handlers/user.handler");
 const manageUserKeyboard = require("../keyboards/manageUserKeybaord");
 const { getSellProfitLoss, setAutoSell } = require("../handlers/setting.handler");
 const { getUserKeyboard, pnlKeyboard } = require("../keyboards/userKeyboard");
@@ -24,6 +24,12 @@ async function setupHandlersUser(ctx) {
     switch (action) {
         case 'user_back':
             await backMenu(ctx, '🔹 User Menu');
+            break;
+        case 'manage_wallets':
+            await handleManageWallets(ctx);
+            break;
+        case 'add_wallet':
+            await handleAddWallet(ctx);
             break;
         case 'setup_wallet':
             await handleSetpWallet(ctx);
@@ -68,9 +74,31 @@ async function setupHandlersUser(ctx) {
                 const page = parseInt(action.split(":")[1]);
                 await viewTrades(ctx, page);
             }
+            if (action?.startsWith("wallets_page_")) {
+                const page = parseInt(action.split("_")[2]);
+                const { message, keyboard } = await getUserWallets(ctx, page);
+                await ctx.editMessageText(message, { reply_markup: keyboard });
+            };
+            if (action?.startsWith("activeWallet_")) {
+                const walletId = action.split("_")[1];
+                await toggleUserActiveWallet(walletId,ctx);
+
+            };
+            
+
     }
 
 }
+
+async function handleAddWallet(ctx){
+    const replyMarkup = {
+        text: adminMessage.addWalletName,
+        options: { reply_markup: backKeyboardUser }
+    };
+    await replyOrEdit(ctx, replyMarkup);
+    ctx.session.waitingWalletAdd = true;
+}
+
 async function handleSetpWallet(ctx) {
     const isWalletSetup = await checkWalletSetup(ctx);
     if (isWalletSetup) {
@@ -181,8 +209,17 @@ async function getPnLEndDate(ctx) {
     await replyOrEdit(ctx, replyMarkup);
 
 }
-
+async function handleManageWallets(ctx) {
+    const userWallets = await getUserWallets(ctx);
+    const replyMarkup = {
+        text: userWallets.message,
+        options: { reply_markup: userWallets.keyboard }
+    };
+    console.log('replyMarkup', replyMarkup)
+    await replyOrEdit(ctx, replyMarkup);
+}
 async function handleTextMessageUser(ctx, action) {
+    logger.info(`ctx.session.actions ${action}`);
     if (ctx.session.waitingForPassword) {
         await verifyPassword(ctx);
     } else if (ctx.session.waitingWalletSetup) {
@@ -212,9 +249,14 @@ async function handleTextMessageUser(ctx, action) {
             return;
         } else {
             ctx.session.waitingForEndDate = false;
-            const { startDate, endDate } = ctx.session;
+            const { startDate } = ctx.session;
             return TradeService.sendEODPnLReport(ctx, 'pnl_custom', startDate, ctx.session.endDate);
         }
+    }else if(ctx.session.waitingWalletAdd){
+        await getWalletNameAdd(ctx);
+    }else if(ctx.session.waitingWalletPKey){
+        await getWalletNameAddPKey(ctx);
+
     }
 
 }

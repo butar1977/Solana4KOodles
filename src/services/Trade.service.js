@@ -11,7 +11,8 @@ const { bot } = require("./telegram.service");
 const TokenPrice = require("../models/TokenPrice");
 const TokenVerification = require("../models/TokenVerification");
 const jupiterService = require("./jupiter.service");
-const Token = require('../models/token')
+const Token = require('../models/token');
+const Wallet = require("../models/Wallet");
 class TradeService {
 
     async executeTrade({ userId, userPublicKey, userPrivateKey, token, amount, tradeType, riskLevel, slippage, stopLoss,
@@ -155,19 +156,13 @@ class TradeService {
                     });
 
                     if (!alreadyTraded) {
-                        const isLastTxnFail = await this.getUserTradeStatus(user._id, user.last4TxnFailed);
-                        if (!isLastTxnFail) {
-                            logger.info(`🛒 Enqueuing buy trade for ${user._id} - ${tokenAddress}`);
-                            await TradeQueue.add("buy", {
-                                userId: user._id,
-                                token: tokenAddress,
-                                riskLevel: risk.label,
-                                decimals: 9
-                            });
-                        } else {
-                            logger.info(`Unable to perform buyTxn.User have multiple failed txn. Disabling trade for userId: ${user._id}`)
-                            await NotificationService.disabledTradingUserAc(user._id);
-                        }
+                        logger.info(`🛒 Enqueuing buy trade for ${user._id} - ${tokenAddress}`);
+                        await TradeQueue.add("buy", {
+                            userId: user._id,
+                            token: tokenAddress,
+                            riskLevel: risk.label,
+                            decimals: 9
+                        });
                     }
                 }
             }
@@ -175,28 +170,78 @@ class TradeService {
         }
     }
 
-    async processTokenSellsForUsers() {
-        const users = await User.find({ status: true, privateKey: { $exists: true } });
-        for (const user of users) {
-            if (!user.tradeEnabled) {
-                logger.info(`[Sell] User disabled trade ${user._id}`);
-                continue;
-            }
-            const isLastTxnFail = await this.getUserTradeStatus(user._id, user.last4TxnFailed);
-            if (isLastTxnFail) {
-                logger.info(`Unable to perform sell .User have multiple failed txn. Disabling trade for userId: ${user._id}`)
-                await NotificationService.disabledTradingUserAc(user._id);
-                continue;
-            }
+    async triggerSaleCheck(holding, purchasePrice, amountToSell, user, trade, decimals) {
+        let currentPrice = 0;
+        const { takeProfit, stopLoss } = user;
 
-            const walletAddress = await getUserPublicKey(user.privateKey);
+        try {
+
+            const priceEntry = await TokenPrice.findOne({
+                token: holding.tokenAddress,
+                date: { $lte: new Date(Date.now() - 60 * 1000) },
+            })
+                .sort({ date: -1 })
+                .lean()
+                .select("price");
+
+            currentPrice = priceEntry?.price ?? 0;
+        } catch (erorr) {
+            currentPrice = await JupiterService.getTokenPrice(holding.tokenAddress);
+        } finally {
+            if (currentPrice == 0) {
+                currentPrice = await JupiterService.getTokenPrice(holding.tokenAddress);
+            }
+        }
+
+        const priceChange = ((currentPrice - purchasePrice) / purchasePrice) * 100;
+        logger.info(`[${holding.tokenAddress}] const priceChange = ((${currentPrice} - ${purchasePrice}) / ${purchasePrice}) * 100;`)
+        const shouldSell =
+            priceChange >= takeProfit ||
+            priceChange <= -stopLoss;
+
+        logger.info(`${priceChange} >= ${takeProfit} ||
+                ${priceChange} <= -${stopLoss};`)
+
+        if (shouldSell) {
+            const realizedPnL = (currentPrice - purchasePrice) * (amountToSell / (10 ** decimals));
+
+            const reason = priceChange >= takeProfit
+                ? 'Take Profit (TP) hit'
+                : 'Stop Loss (SL) triggered';
+
+            logger.info(`📤 Enqueuing SELL for ${user._id} - ${holding.tokenAddress} (Price Change: ${priceChange.toFixed(2)}% tokenPriceAtSell: ${currentPrice})`);
+
+            await TradeQueue.add("sell", {
+                userId: user._id,
+                token: holding.tokenAddress,
+                amount: (amountToSell).toFixed(0),
+                riskLevel: trade.riskLevel,
+                realizedPnL,
+                decimals,
+                tokenPriceAtSell: currentPrice,
+                msg: `Sale was triggered due to: ${reason}. Price Change: ${priceChange.toFixed(2)}%`
+            }, { delay: 10000 });
+        }
+    }
+
+    async processTokenSellsForUsers() {
+        const users = await User.find({ status: true, tradeEnabled: true });
+        for (const user of users) {
+            const activeWallet = await Wallet.findOne({ user_id: user._id, status: true });
+            if (!activeWallet) {
+                logger.info(`[Sell] No active wallet found for user: ${user._id}`);
+                continue;
+            }
+            const walletAddress = await getUserPublicKey(activeWallet.privateKey);
             const userHoldings = await getUserHoldings(walletAddress);
             console.log('userHoldingsuserHoldings', userHoldings)
+            // logger.info(`User holding count ${user._id} ${userHoldings.length}`)
+
             for (const holding of userHoldings) {
-                const { takeProfit, stopLoss } = user;
-
-
-                if (holding.balance <= 0) { continue; }
+                if (holding.balance <= 0) {
+                    logger.info(`holding.balance ${holding.tokenAddress} is less than 0>${holding.balance} `)
+                    continue;
+                }
                 const trade = await Trade.findOne({
                     userId: user._id,
                     token: holding.tokenAddress,
@@ -204,68 +249,20 @@ class TradeService {
                     status: "success"
                 });
 
-                if (!trade) continue;
+                if (!trade) {
+                    logger.info(`Not found trade for ${holding.tokenAddress} ${holding.balance} `)
+                    continue
+                };
                 const { outAmount } = trade;
                 const { decimals } = holding;
                 let amountToSell = outAmount;
                 const amtAtPurchase = (outAmount / (10 ** decimals));
-
                 if (amtAtPurchase > holding.balance) {
                     logger.info(`Actual holding and purcashe amt diff ${holding.tokenAddress} : ${amtAtPurchase} | ${holding.balance}`)
                     amountToSell = holding.balance * (10 ** decimals);
                 }
                 const purchasePrice = trade.tokenPriceAtPurchase;
-                let currentPrice = 0
-
-
-                try {
-                    const priceEntry = await TokenPrice.findOne({
-                        token: holding.tokenAddress,
-                        date: { $lte: new Date(Date.now() - 60 * 1000) },
-                    })
-                        .sort({ date: -1 })
-                        .lean()
-                        .select("price");
-
-                    currentPrice = priceEntry?.price ?? 0;
-                } catch (erorr) {
-                    currentPrice = await JupiterService.getTokenPrice(holding.tokenAddress);
-                } finally {
-                    if (currentPrice == 0) {
-                        currentPrice = await JupiterService.getTokenPrice(holding.tokenAddress);
-                    }
-                }
-
-                const priceChange = ((currentPrice - purchasePrice) / purchasePrice) * 100;
-
-                logger.info(`[${holding.tokenAddress}] const priceChange = ((${currentPrice} - ${purchasePrice}) / ${purchasePrice}) * 100;`)
-                const shouldSell =
-                    priceChange >= takeProfit ||
-                    priceChange <= -stopLoss;
-
-                logger.info(`${priceChange} >= ${takeProfit} ||
-                        ${priceChange} <= -${stopLoss};`)
-
-                if (shouldSell) {
-                    const realizedPnL = (currentPrice - purchasePrice) * (amountToSell / (10 ** decimals));
-
-                    const reason = priceChange >= takeProfit
-                        ? 'Take Profit (TP) hit'
-                        : 'Stop Loss (SL) triggered';
-
-                    logger.info(`📤 Enqueuing SELL for ${user._id} - ${holding.tokenAddress} (Price Change: ${priceChange.toFixed(2)}% tokenPriceAtSell: ${currentPrice})`);
-
-                    await TradeQueue.add("sell", {
-                        userId: user._id,
-                        token: holding.tokenAddress,
-                        amount: (amountToSell).toFixed(0),
-                        riskLevel: trade.riskLevel,
-                        realizedPnL,
-                        decimals,
-                        tokenPriceAtSell: currentPrice,
-                        msg: `Sale was triggered due to: ${reason}. Price Change: ${priceChange.toFixed(2)}%`
-                    }, { delay: 10000 });
-                }
+                await this.triggerSaleCheck(holding, purchasePrice, amountToSell, user, trade, decimals);
             }
         }
     }
@@ -457,29 +454,31 @@ class TradeService {
         try {
             const users = await User.find({
                 status: true,
-                privateKey: { $exists: true, $ne: "" },
-                buyAmount: { $gt: 0 }
+                buyAmount: { $gt: 0 },
+                tradeEnabled: true
             });
-            if (!users) {
+            console.log('usersusers', users)
+
+            if (users.length === 0) {
                 logger.info(`No user found for buy token ${token}`)
                 return;
             }
             logger.info(`Attempt to buy ${token}`)
-
             for (const user of users) {
-                if (!user.tradeEnabled) {
-                    logger.info(`User disabled trade ${user._id} | Single buy token`)
-                } else {
-                    const tk = await TokenVerification.findOne({ mint: token })
-                    const risk = await getRiskLevel(tk.score_normalised);
-                    logger.info(`🛒 Enqueuing buy trade for ${user._id} - ${token}`);
-                    await TradeQueue.add("buy", {
-                        userId: user._id,
-                        token,
-                        riskLevel: risk.label,
-                        decimals: 9
-                    });
+                const activeWallet = await Wallet.findOne({ user_id: user._id, status: true });
+                if (!activeWallet) {
+                    logger.info(`[Buy] No active wallet found for user: ${user._id}`);
+                    continue;
                 }
+                const tk = await TokenVerification.findOne({ mint: token })
+                const risk = await getRiskLevel(tk.score_normalised);
+                logger.info(`🛒 Enqueuing buy trade for ${user._id} - ${token}`);
+                await TradeQueue.add("buy", {
+                    userId: user._id,
+                    token,
+                    riskLevel: risk.label,
+                    decimals: 9
+                });
             }
         } catch (error) {
             logger.info(`Error while buy ${token}`)

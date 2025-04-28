@@ -12,6 +12,7 @@ module.exports = {
     setupWallet: `🔐 *Secure Wallet Setup*\n\n` +
         `Please send your **private key**. We will encrypt it for security.\n\n` +
         `⚠️ *Warning:* Never share your private key with anyone, including here.`,
+    addWalletName: 'Enter wallet name',
     invaildPrivateKey: "❌ *Invalid private key format.* Please send a valid Base58-encoded private key.",
     accountLinked: '✅ *Private Key Added Securely!*\n\nYour wallet is now linked.',
     buyAmtMsg: '💰 Enter the buy amount (in tokens)',
@@ -32,6 +33,9 @@ module.exports = {
     pnlDateRange: 'Select option for PnL',
     adminUpdateUserWallet: 'Please send user **private key**. We will encrypt it for security\n\n' +
         `⚠️ *Warning:* Never share your private key with anyone, including here.`,
-    userNotActive: '❌ User had been removed'
+    userNotActive: '❌ User had been removed',
+    walletNotLinked: `⚠️ No wallets linked to your account.`,
+    walletExist:`Wallet already exist`,
+    walletAdded:`Wallet added`
 
 };

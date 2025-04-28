@@ -24,8 +24,6 @@ class JupiterService {
 
     async getQuote(inputMint, outputMint, amount, slippage = 0.5) {
         try {
-            //await this.enforceRateLimit();  // Enforce rate limit
-
             const params = { inputMint, outputMint, amount, slippageBps: slippage * 100 };
             logger.info(`params', ${JSON.stringify(params)}`);
             const response = await axios.get(`${JUPITER_API_BASE}/quote`, { params });
@@ -38,8 +36,6 @@ class JupiterService {
 
     async getSwapTransaction(userPublicKey, quoteResponse) {
         try {
-            //await this.enforceRateLimit();  // Enforce rate limit
-
             const response = await axios.post(`${JUPITER_API_BASE}/swap`, {
                 userPublicKey,
                 quoteResponse,
@@ -104,11 +100,10 @@ class JupiterService {
 
     async getTokenPrice(token, bulk = false) {
         try {
-            //await this.enforceRateLimit();  // Enforce rate limit
             if (bulk) {
                 return await this.getPriceFromJupiter(token, true);
             }
-            const url = `${RUGCHECK_API_URL ?? `https://api.rugcheck.xyz`}/v1/tokens/${token}/report`;
+            const url = `${RUGCHECK_API_URL}/v1/tokens/${token}/report`;
             const response = await axios.get(url);
             logger.info(`responseresponseresponse, ${response?.data?.price}`);
             return response?.data?.price || 0;

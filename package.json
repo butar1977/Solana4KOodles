@@ -9,7 +9,7 @@
     "prod": "NODE_ENV=production node src/app.js",
     "seed-up": "NODE_ENV=production node src/seeders/RiskLevelSeeder.js; node src/seeders/X_AccountSeeder.js",
     "trade-up": "NODE_ENV=production node src/seeders/tradeSeeder.js;",
-    "migrate-wallets": "NODE_ENV=development node src/seeders/migrateUsersWallet.js",
+    "migrate-wallets": "NODE_ENV=production node src/seeders/migrateUsersWallet.js",
     "deploy-commands:dev": "NODE_ENV=development node src/deploy-commands.js",
     "deploy-commands:prod": "NODE_ENV=production node src/deploy-commands.js"
   },
